@@ -1,0 +1,4 @@
+include README.md
+recursive-include octoprint_nc2marlin/templates *
+recursive-include octoprint_nc2marlin/translations *
+recursive-include octoprint_nc2marlin/static *

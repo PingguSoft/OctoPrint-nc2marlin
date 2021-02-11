@@ -1,0 +1,23 @@
+<div class="control-group">
+    <div class="controls">
+        <label class="control-label">{{ _('MODE') }}</label>
+        <select id="id_mode" 
+                style="max-width: 8em;" 
+                data-bind="
+                    value: sel_mode,
+                    event: { change: changeMode }">
+            <option value="laser">laser</option>
+            <option value="plotter">plotter</option>
+        </select>
+    </div>
+
+    <div class="controls">
+        <label class="control-label">{{ _('laser   mode : replace M3 with M106') }}</label>
+    </div>
+
+    <div class="controls">
+        <label class="control-label">{{ _('plotter mode : replace M3 with M106 inversly') }}</label>
+    </div>
+
+</div>
+
