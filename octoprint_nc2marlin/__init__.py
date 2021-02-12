@@ -25,7 +25,7 @@ class Nc2marlinPlugin(octoprint.plugin.SettingsPlugin,
     ##~~ SettingsPlugin mixin
     # mode : disabled, laser, plotter
     def get_settings_defaults(self):
-        return dict(mode = 'default', wait = '20')
+        return dict(mode = 'default', wait = '0')
 
     def get_settings_version(self):
         return 1
