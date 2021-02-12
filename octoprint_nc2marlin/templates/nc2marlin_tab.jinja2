@@ -1,4 +1,9 @@
 <div class="control-group">
+    <div>
+    <b>This plugin converts spindle/laser gcode (M3/M4/M5) to fan speed gcode (M106/M107)</b>
+    </div>
+
+    <br>
     <div class="controls">
         <label class="control-label">{{ _('MODE') }}</label>
         <select id="id_mode" 
@@ -6,18 +11,42 @@
                 data-bind="
                     value: sel_mode,
                     event: { change: changeMode }">
+            <option value="default">default</option>
             <option value="laser">laser</option>
             <option value="plotter">plotter</option>
         </select>
     </div>
 
     <div class="controls">
-        <label class="control-label">{{ _('laser   mode : replace M3 with M106') }}</label>
+        <label class="control-label">{{ _('DELAY after on/off') }}</label>
+        <input type="text" class="input-block-level" id="id_wait" style="max-width: 8em;"
+            data-bind="value: text_wait">
+    </div>
+
+    <br>
+    <div>
+    <b>NOTE</b>
+    </div>
+    
+    <br>
+    <div class="controls">
+        <label class="control-label">{{ _('default : no processing with gcodes') }}</label>
     </div>
 
     <div class="controls">
-        <label class="control-label">{{ _('plotter mode : replace M3 with M106 inversly') }}</label>
+        <label class="control-label">{{ _('laser : M3 for engraving (M3->M106), M5 for off (M5->M107)') }}</label>
     </div>
 
-</div>
+    <div class="controls">
+        <label class="control-label">{{ _('plotter : M3 for pen lifting (M3->M107), M5 for drawing (M5->M106)') }}</label>
+    </div>
 
+    <div class="controls">
+        <label class="control-label">{{ _('delay : delay after activating laser or pen') }}</label>
+    </div>
+
+    <br>
+    <br>
+    <button align="bottom" class="btn box" data-bind="click: function() {save()}">SAVE</button>    
+
+</div>

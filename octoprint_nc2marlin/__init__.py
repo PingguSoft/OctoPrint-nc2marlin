@@ -16,25 +16,28 @@ class Nc2marlinPlugin(octoprint.plugin.SettingsPlugin,
                       octoprint.plugin.AssetPlugin,
                       octoprint.plugin.TemplatePlugin):
 
-    #;M3 (on) -> M107 (servo off : down)
-    #;M5 (off) -> M106 (servo on : lift)
-    #
-    #;To use 3D Printer Laser Mode
-    #;M3 (on) -> M106 S255 (laser on)
-    #;M5 (off) -> M107 (laser off)
-
     def __init__(self):
-        self.fan_gcode  = 'M106'
-        self.last_mcode = ''
-        self.last_gcode = 'G0'
+        self._fan_gcode   = 'M106'
+        self._wait_gcode  = 'G4'
+        self._last_mcode  = ''
+        self._last_gcode  = 'G0'
 
     ##~~ SettingsPlugin mixin
+    # mode : disabled, laser, plotter
     def get_settings_defaults(self):
-        return dict(mode="laser")
+        return dict(mode = 'default', wait = '20')
+
+    def get_settings_version(self):
+        return 1
+
+    #def on_settings_save(self, data):
+    #    self._logger.info('SAVE data:' + data)
+    #    octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
+    #    on_after_startup()
 
     def get_template_configs(self):
         return [
-            dict(type="settings", custom_bindings=False)
+            dict(type = 'settings', custom_bindings = True)
         ]
 
     ##~~ AssetPlugin mixin
@@ -42,15 +45,16 @@ class Nc2marlinPlugin(octoprint.plugin.SettingsPlugin,
         # Define your plugin's asset files to automatically include in the
         # core UI here.
         return dict(
-            js=["js/nc2marlin.js"],
-            css=["css/nc2marlin.css"],
-            less=["less/nc2marlin.less"]
+            js=['js/nc2marlin.js'],
+            css=['css/nc2marlin.css'],
+            less=['less/nc2marlin.less']
         )
 
     ##~~ Softwareupdate hook
     def get_template_vars(self):
         return dict(
-            mode=self._settings.get(["mode"])
+            mode = self._settings.get(['mode']),
+            wait = self._settings.get(['wait']),
         )
 
     def get_update_information(self):
@@ -59,97 +63,93 @@ class Nc2marlinPlugin(octoprint.plugin.SettingsPlugin,
         # for details.
         return dict(
             nc2marlin=dict(
-                displayName="nc2marlin",
+                displayName='nc2marlin',
                 displayVersion=self._plugin_version,
 
                 # version check: github repository
-                type="github_release",
-                user="pinggusoft",
-                repo="OctoPrint-nc2marlin",
+                type='github_release',
+                user='pinggusoft',
+                repo='OctoPrint-nc2marlin',
                 current=self._plugin_version,
 
                 # update method: pip
-                pip="https://github.com/pinggusoft/OctoPrint-nc2marlin/archive/{target_version}.zip"
+                pip='https://github.com/pinggusoft/OctoPrint-nc2marlin/archive/{target_version}.zip'
             )
         )
 
-#    def rewrite_m107(self, comm_instance, phase, cmd, cmd_type, gcode, *args, **kwargs):
-#        if gcode and gcode == "M107":
-#            cmd = "M106 S0"
-#        return cmd,
-
-    def toFanCmd(self, isPlotter, strSpeed):
+    def toFanCmd(self, out, strSpeed):
         speed = 0;
+        mode  = self._settings.get(['mode'])
+        wait  = int(self._settings.get(['wait']))
+        isInv = True if mode == 'plotter' else False
+        
         if strSpeed:
             speed = int(strSpeed)
-        if isPlotter:
+        if isInv:
             speed = 255 - speed
-        return self.fan_gcode + ' S' + str(speed) + '\n'
 
-    def rewrite_gcode(self, comm_instance, phase, cmd, cmd_type, gcode, *args, **kwargs):
-        line = cmd
+        code = self._fan_gcode + ' S' + str(speed)
+        if code != self._last_mcode:
+            out.append(code)
+            self._last_mcode = code
+            if wait != 0:
+                out.append(self._wait_gcode + ' P' + str(wait))
+
+    def rewrite_gcode(self, comm_instance, phase, cmd, cmd_type, gcode, subcode, tags, *args, **kwargs):
+        #self._logger.info('Processing queuing: [' + cmd + ',' + str(cmd_type)+ ',' + str(tags) + ']')
+
+        mode = self._settings.get(['mode'])
+        #self._logger.info('mode:' + mode + ', wait:' + self._settings.get(['wait']))
+
+        if mode == 'default':
+            return cmd
+        
+        line      = cmd
+        out       = []
+
         find = re.search('^[G|M|\(|;|T|\s].*', line)            # find valid commands G, M, (, ;, T, blank
         if find == None:                                        # if not, add last gcode to the begining
-            line = self.last_gcode + ' ' + line
+            line = self._last_gcode + ' ' + line
         
-        find = re.search('^(M[3-4])\s*S*([0-9]*)', line)        # find M3, M4 w/wo S
+        find = re.search('(^M[3-4]$|^M[3-4][^0-9])\s*S*([0-9]*)', line)        # find M3, M4 w/wo S
         if find:
             items = find.groups();
-            speed = '255' if len(items[1]) == 0 else items[1]
-            fan_cmd = self.toFanCmd(isPlotter, speed)
-            if fan_cmd != self.last_mcode:
-                self.last_mcode = fan_cmd
-                return fan_cmd,
+            strSpeed = '255' if len(items[1]) == 0 else items[1]
+            self.toFanCmd(out, strSpeed)
         else:
-            find = re.search('^M5.*', line)                     # find M5
+            find = re.search('^M5$', line)               # find M5
             if find:
-                speed = '255' if isPlotter else '0'
-                fan_cmd =  self.toFanCmd(isPlotter, speed)
-                if fan_cmd != self.last_mcode:
-                    self.last_mcode = fan_cmd
-                    return fan_cmd,
+                strSpeed = '0'
+                self.toFanCmd(out, strSpeed)
             else:
                 find = re.search('^(G[0-3]).*', line)           # find G0-G3
                 if find:
                     items = find.groups();
-                    self.last_gcode = items[0]
+                    self._last_gcode = items[0]
                 
-                find = re.search('^(G[0-3])(.*)S(.*)', line)    # find G0-G3 with S parameter
+                find = re.search('^(G[0-3][^0-9])(.*)S([0-9]*)', line)    # find G0-G3 with S parameter
                 if find:
                     items = find.groups();
-                    fan_cmd =  self.toFanCmd(isPlotter, items[2])
-                    
-                    line = None
+                    self.toFanCmd(out, items[2])
                     if len(items[1]) > 1:
-                        line = items[0] + items[1] + '\n'
-
-                    if fan_cmd != self.last_mcode:
-                        self.last_mcode = fan_cmd
-                    else:
-                        fan_cmd = None
+                        out.append(items[0] + items[1])
+                else:
+                    out.append(cmd)
                     
-                    if fan_cmd and line:
-                        return [(fan_cmd,), (line,)]
-                    elif fan_cmd:
-                        return fan_cmd,
-                    elif line:
-                        return line,
-
-        return line,
-        
-
+        #self._logger.info(out)
+        return out
 
 # If you want your plugin to be registered within OctoPrint under a different name than what you defined in setup.py
-# ("OctoPrint-PluginSkeleton"), you may define that here. Same goes for the other metadata derived from setup.py that
+# ('OctoPrint-PluginSkeleton'), you may define that here. Same goes for the other metadata derived from setup.py that
 # can be overwritten via __plugin_xyz__ control properties. See the documentation for that.
-__plugin_name__ = "nc2marlin"
+__plugin_name__ = 'nc2marlin'
 
 # Starting with OctoPrint 1.4.0 OctoPrint will also support to run under Python 3 in addition to the deprecated
 # Python 2. New plugins should make sure to run under both versions for now. Uncomment one of the following
 # compatibility flags according to what Python versions your plugin supports!
-#__plugin_pythoncompat__ = ">=2.7,<3" # only python 2
-#__plugin_pythoncompat__ = ">=3,<4" # only python 3
-__plugin_pythoncompat__ = ">=2.7,<4" # python 2 and 3
+#__plugin_pythoncompat__ = '>=2.7,<3' # only python 2
+#__plugin_pythoncompat__ = '>=3,<4' # only python 3
+__plugin_pythoncompat__ = '>=2.7,<4' # python 2 and 3
 
 def __plugin_load__():
     global __plugin_implementation__
@@ -157,7 +157,7 @@ def __plugin_load__():
 
     global __plugin_hooks__
     __plugin_hooks__ = {
-        "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
-        "octoprint.comm.protocol.gcode.queuing": __plugin_implementation__.rewrite_gcode,
+        'octoprint.plugin.softwareupdate.check_config': __plugin_implementation__.get_update_information,
+        'octoprint.comm.protocol.gcode.queuing': __plugin_implementation__.rewrite_gcode,
     }
 
