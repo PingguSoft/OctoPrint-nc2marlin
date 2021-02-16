@@ -1,11 +1,58 @@
-<div class="control-group">
-    <label class="control-label">{{ _('MODE') }}</label>
-    <div class="controls">
-        <select style="max-width: 8em;" data-bind="value:settings.plugins.nc2marlin.mode">
-            <option value="default">default</option>
-            <option value="laser">laser</option>
-            <option value="plotter">plotter</option>
-        </select>
-    </div>
-</div>
+<form class="form-horizontal">
+    <h4>nc2marlin settings</h4>
+    <hr>
 
+    <div class="control-group">
+        <b>This plugin converts spindle/laser control gcode for nc to cooling fan control gcode for 3dp</b>
+    </div>
+
+    <br>
+
+    <div class="control-group">        
+        <label class="control-label">MODE</label>
+        <div class="controls">
+            <label class="radio">
+                <input type="radio" value="none" data-bind="checked: settings.plugins.nc2marlin.mode"> none - no processing with gcodes
+            </label>
+            <label class="radio">
+                <input type="radio" value="marlin" data-bind="checked: settings.plugins.nc2marlin.mode"> marlin - fill the omitted codes only
+            </label>
+            <label class="radio">
+                <input type="radio" value="laser" data-bind="checked: settings.plugins.nc2marlin.mode"> laser - marlin + fan control for laser
+            </label>
+            <label class="radio">
+                <input type="radio" value="plotter" data-bind="checked: settings.plugins.nc2marlin.mode"> plotter - marlin + fan control for plotter
+            </label>
+        </div>
+        
+        <br>
+        <label class="control-label">DELAY</label>
+        <div class="controls">
+            <input type="text" class="input-block-level" style="max-width: 8em;"
+                data-bind="value: settings.plugins.nc2marlin.wait">
+            <dd>specify delay (ms) after activating laser or pen</dd>
+        </div>
+    </div>
+
+    <br>
+
+    <div>
+        <h4>NOTE</h4>
+        <hr>
+        <dl>
+            <dt><b>marlin mode</b></dt>
+                <dd>G0/G1 may be omitted with the sequent codes in nc file, only omitted code is filled</dd>
+            <br>
+            <dt><b>laser mode</b></dt>
+                <dd>Convert M3/M4(laser/spindle on) to fan on(M106 S#) while M5 to fan off(M106 S0)</dd>
+                <dd>G0/G1 with S# will be converted to M106 S# and G0/G1 without S#<dd>
+                <dd>Click <a href="https://github.com/PingguSoft/3dp_hotplug_tools#laser-tool">here</a> for details</dd>
+            <br>
+            <dt><b>plotter mode</b></dt>
+                <dd>Convert M3/M4(laser/spindle on) to fan off(M106 S0) while M5 to fan on(M106 S255)</dd>
+                <dd>G0/G1 with S# will be converted to M106 S# and G0/G1 without S#<dd>
+                <dd>Click <a href="https://github.com/PingguSoft/3dp_hotplug_tools#plotter-tool">here</a> for details</dd>
+        </dl>
+    </div>
+    
+</form>

@@ -21,36 +21,29 @@ class Nc2marlinPlugin(octoprint.plugin.SettingsPlugin,
         self._wait_gcode  = 'G4'
         self._last_mcode  = ''
         self._last_gcode  = 'G0'
+        self._mode        = ''
+        self._wait        = 0
 
-    ##~~ SettingsPlugin mixin
-    # mode : disabled, laser, plotter
+    # mode : none, marlin, laser, plotter
     def get_settings_defaults(self):
-        return dict(mode = 'default', wait = '0')
+        return dict(mode = 'none', wait = '0')
 
     def get_settings_version(self):
         return 1
 
-    #def on_settings_save(self, data):
-    #    self._logger.info('SAVE data:' + data)
-    #    octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
-    #    on_after_startup()
-
     def get_template_configs(self):
         return [
-            dict(type = 'settings', custom_bindings = True)
+            dict(type = "settings", custom_bindings = False)
+            #dict(type="settings", template="nc2marlin_settings.jinja2", custom_bindings=True)
         ]
 
-    ##~~ AssetPlugin mixin
     def get_assets(self):
-        # Define your plugin's asset files to automatically include in the
-        # core UI here.
         return dict(
-            js=['js/nc2marlin.js'],
+            #js=['js/nc2marlin.js'],
             css=['css/nc2marlin.css'],
             less=['less/nc2marlin.less']
         )
 
-    ##~~ Softwareupdate hook
     def get_template_vars(self):
         return dict(
             mode = self._settings.get(['mode']),
@@ -77,11 +70,26 @@ class Nc2marlinPlugin(octoprint.plugin.SettingsPlugin,
             )
         )
 
+    def get_settings(self):
+        self._mode = self._settings.get(['mode'])
+        self._wait = int(self._settings.get(['wait']))
+        
+    def on_after_startup(self):
+        self.get_settings()
+
+    # use below function only when custom_bindings is True
+    #def on_settings_save(self, data):
+    #    self._logger.info('SAVE data:' + data)
+    #    octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
+    #    self.get_settings()
+        
+
+    ###############################################################################################
+    #  Codes
+    ###############################################################################################
     def toFanCmd(self, out, strSpeed):
         speed = 0;
-        mode  = self._settings.get(['mode'])
-        wait  = int(self._settings.get(['wait']))
-        isInv = True if mode == 'plotter' else False
+        isInv = True if self._mode == 'plotter' else False
         
         if strSpeed:
             speed = int(strSpeed)
@@ -92,49 +100,55 @@ class Nc2marlinPlugin(octoprint.plugin.SettingsPlugin,
         if code != self._last_mcode:
             out.append(code)
             self._last_mcode = code
-            if wait != 0:
-                out.append(self._wait_gcode + ' P' + str(wait))
+            if self._wait != 0:
+                out.append(self._wait_gcode + ' P' + str(self._wait))
 
     def rewrite_gcode(self, comm_instance, phase, cmd, cmd_type, gcode, subcode, tags, *args, **kwargs):
+        self.get_settings()
         #self._logger.info('Processing queuing: [' + cmd + ',' + str(cmd_type)+ ',' + str(tags) + ']')
+        #self._logger.info('mode:' + self._mode + ', wait:' + str(self._wait))
 
-        mode = self._settings.get(['mode'])
-        #self._logger.info('mode:' + mode + ', wait:' + self._settings.get(['wait']))
-
-        if mode == 'default':
+        # return immediately if the mode is none
+        if self._mode == 'none':
             return cmd
         
-        line      = cmd
-        out       = []
+        line = cmd
+        out  = []
 
         find = re.search('^[G|M|\(|;|T|\s].*', line)            # find valid commands G, M, (, ;, T, blank
         if find == None:                                        # if not, add last gcode to the begining
             line = self._last_gcode + ' ' + line
         
-        find = re.search('(^M[3-4]$|^M[3-4][^0-9])\s*S*([0-9]*)', line)        # find M3, M4 w/wo S
+        # find available gcode
+        find = re.search('^(G[0-3][^0-9]).*', line)             # find G0-G3
         if find:
             items = find.groups();
-            strSpeed = '255' if len(items[1]) == 0 else items[1]
-            self.toFanCmd(out, strSpeed)
+            self._last_gcode = items[0]
+
+        # only add skipped gcode with marlin mode
+        if self._mode == 'marlin':
+            out.append(line)
+            return out
+
+        find = re.search('^(G[0-3][^0-9])(.*)S([0-9]*)', line)  # find G0-G3 with S parameter
+        if find:
+            items = find.groups();
+            self.toFanCmd(out, items[2])
+            if len(items[1]) > 1:
+                out.append(items[0] + items[1])        
         else:
-            find = re.search('^M5$', line)               # find M5
+            find = re.search('(^M[3-4]$|^M[3-4][^0-9])\s*S*([0-9]*)', line)        # find M3, M4 w/wo S
             if find:
-                strSpeed = '0'
+                items = find.groups();
+                strSpeed = '255' if len(items[1]) == 0 else items[1]
                 self.toFanCmd(out, strSpeed)
             else:
-                find = re.search('^(G[0-3]).*', line)           # find G0-G3
+                find = re.search('^M5$', line)                      # find M5
                 if find:
-                    items = find.groups();
-                    self._last_gcode = items[0]
-                
-                find = re.search('^(G[0-3][^0-9])(.*)S([0-9]*)', line)    # find G0-G3 with S parameter
-                if find:
-                    items = find.groups();
-                    self.toFanCmd(out, items[2])
-                    if len(items[1]) > 1:
-                        out.append(items[0] + items[1])
+                    strSpeed = '0'
+                    self.toFanCmd(out, strSpeed)
                 else:
-                    out.append(cmd)
+                    out.append(line)
                     
         #self._logger.info(out)
         return out
